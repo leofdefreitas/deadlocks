@@ -119,6 +119,7 @@ int checkForDeadLock(sem_t *proc){
 0, 1 */
 
 int sem_wait(sem_t *sem) {
+    //teste
     sem_t *aux_sem = sem;
     int ehIgual = (aux_sem != sem);
     printf("%d", ehIgual);
