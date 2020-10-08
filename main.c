@@ -56,6 +56,7 @@ void *p2(void *args){
 
 int main(int argc, char const *argv[])
 {
+    //comentario
     pthread_t t1,t2;
     sem_init(&s1,0,1);
     //sem_init(&s2,0,1);
