@@ -13,10 +13,20 @@ sem_t s1;
 sem_t s2;
 
 void *p1(void *args){
-    sem_wait(&s1);
+    int return1 = sem_wait(&s1);
+    int return2 = sem_wait(&s2);
+    sleep(2);
+    if (return1 >= 0)
+        sem_post(&s1);
+    else if (return1 == -2)
+        printf("Deadlock detected. Request to use resource s1 was killed for p1.\n");
+    if (return2 >= 0)
+        sem_post(&s2);
+    else if (return2 == -2)
+        printf("Deadlock detected. Request to use resource s2 was killed for p1.\n");
     //int p=5;
-    /* while (1)
-    {
+    //while (1)
+    /* {
         if(sem_wait(&s1)==-2){
             int ra=(((rand() % 5) + 1) * 10000);
             printf("\ndormindo por: %d ms", ra);
@@ -38,7 +48,18 @@ void *p1(void *args){
 }
 void *p2(void *args){
     //int q=5;
-    while (1)
+    int return2 = sem_wait(&s2);
+    int return1 = sem_wait(&s1);
+    sleep(2);
+    if (return2 >= 0)
+        sem_post(&s2);
+    else if (return2 == -2)
+        printf("Deadlock detected. Request to use resource s2 was killed for p2.\n");
+    if (return1 >= 0)
+        sem_post(&s1);
+    else if (return1 == -2)
+        printf("Deadlock detected. Request to use resource s1 was killed for p2.\n");
+    /* while (1)
     {
         sem_wait(&s1);
         //printf("\nBloqueio do s1 P2 ender: %p\n",&s1);
@@ -51,7 +72,7 @@ void *p2(void *args){
         sem_post(&s2);
         printf("\nLiberação do s2 P2\n");
         //q--;
-    }
+    } */
 }
 
 int main(int argc, char const *argv[])
@@ -59,10 +80,10 @@ int main(int argc, char const *argv[])
     //comentario
     pthread_t t1,t2;
     sem_init(&s1,0,1);
-    //sem_init(&s2,0,1);
+    sem_init(&s2,0,1);
     pthread_create(&t1,NULL,p1,NULL);
-    //pthread_create(&t2,NULL,p2,NULL);
+    pthread_create(&t2,NULL,p2,NULL);
     pthread_join(t1,NULL);
-    //pthread_join(t2,NULL);
+    pthread_join(t2,NULL);
     return 0;
 }

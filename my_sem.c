@@ -7,8 +7,10 @@
 #include <fcntl.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <errno.h>
 
-#define GRAPH_SIZE 5
+#define GRAPH_SIZE 4
 
 int (*_sem_wait)(sem_t *) = NULL;
 int (*_sem_post)(sem_t *) = NULL;
@@ -52,7 +54,7 @@ void removeEdge(Graph *g, int src, int dest);
 
 void printGraph(Graph *g);
 
-void DFS(Graph* g, int v);
+int DFS(Graph* g, int v);
 
 void resetVisited(Graph* g);
 
@@ -109,32 +111,38 @@ int checkForDeadLock(sem_t *proc){
      * - Remove aresta recurso -> processo
      *  
      */
- 
-/* 
-0 - p1
-1 - r1
-2 - p2
-3 - r2
 
-0, 1 */
-
-int sem_wait(sem_t *sem) {
-    //blablabla
-    sem_t *aux_sem = sem;
-    int ehIgual = (aux_sem != sem);
-    printf("%d", ehIgual);
-    /* g = createGraph(GRAPH_SIZE);
-    int posSem = -1;
-    int posThread = -1;
-    pthread_t aux_t = pthread_self();
-
-    for (int i=0; i<GRAPH_SIZE; i++) {
+/**
+ * Recebe: 
+ *      sem_t sem = semaforo (recurso) a ser procurado no vetor knownVertex
+ *      pthread_t t = thread (processo) a ser procurada no vetor knownVertex
+ * Retorna vetor onde:
+ *     positions[0] = index do semaforo (recurso) no vetor knownVertex. Se valor == -1, semaforo nao foi encontrado em knownVertex
+ *     positions[1] = index da thread (processo) no vetor knownVertex. Se valor == -1, thread nao foi encontrada em knownVertex
+ */
+void getVertexIndexes(sem_t *sem, pthread_t t, int positions[]) {
+    for (int i=0; i<numberOfKnownVertex; i++) {
         if (knownVertex[i].resource == sem) {
-            posSem = i;
-        } else if (knownVertex[i].pid == aux_t) {
-            posThread = i;
+            positions[0] = i;
+        } else if (knownVertex[i].pid == t) {
+            positions[1] = i;
         }
     }
+}
+
+int sem_wait(sem_t *sem) {
+
+    if (!_sem_wait) {
+        _sem_wait = dlsym(RTLD_NEXT, "sem_wait");
+    } 
+
+    g = createGraph(GRAPH_SIZE);
+    pthread_t aux_t = pthread_self();
+
+    int positions[2] = {-1, -1};
+    getVertexIndexes(sem, aux_t, positions);
+    int posSem = positions[0];
+    int posThread = positions[1];
     if (posSem < 0) {
         knownVertex[numberOfKnownVertex].resource = sem;
         posSem = numberOfKnownVertex;
@@ -145,32 +153,27 @@ int sem_wait(sem_t *sem) {
         posThread = numberOfKnownVertex;
         numberOfKnownVertex++;
     }
- */
-    
 
-
-    //int r;
-    //testGraph(g);
-    //addEdge(g, );
-
-         
-    /* printf("Semaforo: %p\n", sem);
-
-    printf("Processo: %ld\n", aux_t);
-    int r;    
-    if (!_sem_wait) {
-        _sem_wait = dlsym(RTLD_NEXT, "sem_wait");
-    } */
-
-    // printf("\nSem: %p",sem);
-    /* if(checkForDeadLock(sem)!=0){
+    addEdge(g, posThread, posSem);
+    if (DFS(g, posThread) == -1) {
+        printf("Deadlock\n");
+        fflush(stdout);
+        removeEdge(g, posThread, posSem);
         return -2;
-    } */
+    } else {
+        printf("Nenhum deadlock encontrado.\n");
+        fflush(stdout);
+    } 
 
+    int r = _sem_wait(sem);
+    removeEdge(g, posThread, posSem);
+    addEdge(g, posSem, posThread);
+    resetVisited(g);
+    //printf("=========================================\n");
+    fflush(stdout);
+    usleep(500000);
 
-    //r = _sem_wait(sem);
-    //return(r);
-    return 1;
+    return r;
 }
 
 /* int graphRemove(sem_t *proc){
@@ -196,16 +199,23 @@ int sem_wait(sem_t *sem) {
     pr=fgets(buffer, bufferLength, file);
     fclose(file);
 }
-
+*/
 int sem_post(sem_t *sem) {
+    pthread_t aux_t = pthread_self();
+    printf("Processo %ld liberando recurso %p\n", aux_t, sem);
+    fflush(stdout);
     int r;    
+    int positions[2];
+    getVertexIndexes(sem, aux_t, positions);
+    printGraph(g);
+    printf("src: %d, dest: %d\n", positions[0], positions[1]);
+    removeEdge(g, positions[0], positions[1]);
     if (!_sem_post) {
         _sem_post = dlsym(RTLD_NEXT, "sem_post");
     }
-
     r = _sem_post(sem);
     return(r);
-} */
+} 
 
 
 Node* createNode(int v/*,  Info i */) {
@@ -241,13 +251,17 @@ Graph* createGraph(int n) {
 }
 
 void addEdge(Graph *g, int src, int dest/* , Info srcInfo, Info destInfo */) {
+
+    //printf("Adicionando <%d, %d>\n", src, dest);
     Node *newNode = createNode(dest/* , destInfo */); 
     newNode->next = g->list[src];
     g->list[src] = newNode;
+    //printGraph(g);
 }
 
 
 void removeEdge(Graph *g, int src, int dest) {
+    //printGraph(g);
     Node *auxNode = g->list[src];
     if (auxNode->next == NULL) {
         g->list[src] = NULL;
@@ -257,20 +271,30 @@ void removeEdge(Graph *g, int src, int dest) {
         }
         auxNode->next = auxNode->next->next;
     }
+    //printGraph(g);
 }
 
 void printGraph(Graph *g) {
+    printf("Imprimindo Grafo. \n");
+    fflush(stdout);
     for (int v=0; v<g->size; v++) {
         Node* temp = g->list[v];
+        printf("%d: [ ", v);
+        fflush(stdout);
         while(temp) {
-            printf("<%d, %d>", v, temp->v);
+            printf("%d", temp->v);
+            fflush(stdout);
+            if (temp->next != NULL) printf(", ");
             temp = temp->next;
         }
-        printf("\n");
+        printf(" ]\n");
+        fflush(stdout);
     }
+    printf("-------------------------\n");
+    fflush(stdout);
 }
 
-void DFS(Graph* g, int v) {
+int DFS(Graph* g, int v) {
     Node* adjList = g->list[v];
     Node* temp = adjList;
 
@@ -280,25 +304,22 @@ void DFS(Graph* g, int v) {
     while (temp != NULL) {
         int connectedV = temp->v;
 
-        if (g->visited[connectedV] == 0) {
-            DFS(g, connectedV);
-        }
-        else {
-            printf("Ciclo encontrado em <%d, %d>.\n", v, connectedV);
-            hasCycle = 1;
-        }
+        if (g->visited[connectedV] == 0) 
+            return DFS(g, connectedV);
+        else 
+            return -1; //Deadlock
         temp = temp->next;
     }
+    return 1;
 }
 
 void resetVisited(Graph* g) {
-    hasCycle = 0;
     for(int i=0; i<g->size; i++) {
         g->visited[i] = 0;
     }
 }
 
-
+/* 
 void testGraph(Graph* g) {
     addEdge(g, 0, 1);
     addEdge(g, 1, 2);
@@ -314,3 +335,4 @@ void testGraph(Graph* g) {
     if (hasCycle) printf("Deadlock\n");
     else printf("No deadlock\n");
 }
+ */
